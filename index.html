@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Holy Notes</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&display=swap" rel="stylesheet" />
+  <!-- jsPDF para exportar PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body data-theme="light">
+
+  <!-- ═══════════════════════
+       TOPBAR
+  ═══════════════════════ -->
+  <div id="topbar">
+    <div id="topbar-left">
+      <button id="hamburger-btn" onclick="toggleSidebar()" title="Mostrar/ocultar panel">☰</button>
+      <span id="app-logo" onclick="goHome()" title="Inicio">Holy Notes</span>
+    </div>
+    <div id="tab-nav">
+      <button id="btn-notas"  class="tab-btn active" onclick="showTab('notas')">📝 Mis Notas</button>
+      <button id="btn-biblia" class="tab-btn"         onclick="showTab('biblia')">📖 Biblia</button>
+    </div>
+    <div id="topbar-right">
+      <button id="theme-btn" onclick="toggleTheme()" title="Cambiar modo">🌙</button>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════
+       MIS NOTAS — 3 paneles
+  ═══════════════════════ -->
+  <div id="tab-notas" class="tab-section">
+
+    <!-- SIDEBAR -->
+    <div id="main-sidebar">
+
+      <!-- Nueva nota -->
+      <div id="sidebar-top">
+        <button class="accent-btn" onclick="openNewNote()" id="new-note-btn">
+          <span>+</span> Nueva nota
+        </button>
+
+        <!-- Buscador del sidebar -->
+        <div id="sidebar-search-wrap">
+          <span class="sidebar-search-icon">🔍</span>
+          <input id="sidebar-search-input"
+                 type="text"
+                 placeholder="Buscar…"
+                 oninput="runSidebarSearch(this.value)" />
+          <button id="sidebar-search-clear" onclick="clearSidebarSearch()" title="Limpiar">×</button>
+        </div>
+
+        <!-- Carpetas -->
+        <div class="sidebar-section-header" onclick="toggleFolderList()">
+          <span>📁 Carpetas</span>
+          <span id="folder-arrow">▼</span>
+        </div>
+        <div id="folder-list-container">
+          <div id="folder-list"></div>
+          <button class="new-folder-btn" onclick="toggleNewFolderInput()">+ Nueva carpeta</button>
+          <div id="new-folder-area">
+            <input id="new-folder-input" type="text" placeholder="Nombre de la carpeta…" />
+            <div class="new-folder-section-label">Ícono (cualquier emoji)</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+              <input id="new-folder-icon" type="text" value="📁" maxlength="4"
+                     placeholder="📁"
+                     style="width:52px;font-size:1.3rem;text-align:center;padding:5px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);" />
+              <span style="font-size:11px;color:var(--text2);">Escribí cualquier emoji desde tu teclado</span>
+            </div>
+            <div class="new-folder-section-label">Color</div>
+            <div id="new-folder-colors">
+              <button class="nf-color-btn selected" data-color="#F59E0B" onclick="selectNewFolderColor(this)" style="background:#F59E0B;"></button>
+              <button class="nf-color-btn" data-color="#EF4444" onclick="selectNewFolderColor(this)" style="background:#EF4444;"></button>
+              <button class="nf-color-btn" data-color="#3B82F6" onclick="selectNewFolderColor(this)" style="background:#3B82F6;"></button>
+              <button class="nf-color-btn" data-color="#10B981" onclick="selectNewFolderColor(this)" style="background:#10B981;"></button>
+              <button class="nf-color-btn" data-color="#8B5CF6" onclick="selectNewFolderColor(this)" style="background:#8B5CF6;"></button>
+              <button class="nf-color-btn" data-color="#EC4899" onclick="selectNewFolderColor(this)" style="background:#EC4899;"></button>
+              <button class="nf-color-btn" data-color="#06B6D4" onclick="selectNewFolderColor(this)" style="background:#06B6D4;"></button>
+              <button class="nf-color-btn" data-color="#6B7280" onclick="selectNewFolderColor(this)" style="background:#6B7280;"></button>
+            </div>
+            <button class="accent-btn" onclick="createFolder()" style="width:100%;margin-top:8px;justify-content:center;">✓ Crear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notas recientes (desplegable) -->
+      <div id="sidebar-notes-section">
+        <div class="sidebar-section-header" onclick="toggleSidebarNotes()">
+          <span id="sidebar-notes-label">📋 Notas recientes</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="sidebar-notes-count" class="sidebar-count"></span>
+            <span id="sidebar-notes-arrow">▼</span>
+          </div>
+        </div>
+        <div id="sidebar-notes-container">
+          <div id="sidebar-notes-list"></div>
+        </div>
+      </div>
+
+    </div><!-- /main-sidebar -->
+
+
+    <!-- ÁREA PRINCIPAL -->
+    <div id="notes-main">
+
+      <!-- Vista: lista de notas -->
+      <div id="notes-list-view">
+
+        <!-- Buscador principal (encima de las notas) -->
+        <div id="main-search-wrap">
+          <span class="main-search-icon">🔍</span>
+          <input id="main-search-input"
+                 type="text"
+                 placeholder="Buscar…"
+                 oninput="runMainSearch(this.value)" />
+          <button id="main-search-clear" onclick="clearMainSearch()" title="Limpiar">×</button>
+        </div>
+
+        <h2 id="notes-view-title">Todas las notas</h2>
+        <div id="notes-cards-container"></div>
+      </div>
+
+      <!-- Vista: editor -->
+      <div id="note-editor-view">
+
+        <div id="editor-topbar">
+          <button class="ghost-btn" onclick="closeEditor()">← Volver</button>
+          <button class="accent-btn" onclick="saveNote()">💾 Guardar</button>
+          <button class="ghost-btn pdf-btn" onclick="exportPDF()" title="Exportar como PDF">📄 PDF</button>
+          <button class="ghost-btn" onclick="enterPresentation()" title="Modo presentación" style="font-size:12px;">⛶ Presentar</button>
+          <span id="save-status"></span>
+          <span id="autosave-status"></span>
+        </div>
+
+        <!-- Metadatos -->
+        <div id="note-metadata">
+          <div id="note-title-row">
+            <input id="note-title" type="text" placeholder="Nombre" />
+            <!-- Botón pin -->
+            <button id="pin-btn" onclick="togglePin()" title="Anclar nota al tope">📌</button>
+          </div>
+          <div id="metadata-row">
+            <input id="note-date"    type="date" />
+            <input id="note-speaker" type="text" placeholder="Pr. Nombre Apellido" />
+            <select id="note-folder"></select>
+          </div>
+          <div id="tags-row">
+            <div id="tags-container"></div>
+            <input id="tag-input" type="text" placeholder="+ tag (Enter)" />
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div id="editor-toolbar">
+          <button class="tbtn" title="Negrita (Ctrl+B)"   onmousedown="event.preventDefault(); fmt('bold')"><b>B</b></button>
+          <button class="tbtn" title="Cursiva (Ctrl+I)"   onmousedown="event.preventDefault(); fmt('italic')"><i>I</i></button>
+          <button class="tbtn" title="Subrayado (Ctrl+U)" onmousedown="event.preventDefault(); fmt('underline')"><u>U</u></button>
+          <button class="tbtn" title="Tachado"            onmousedown="event.preventDefault(); fmt('strikeThrough')"><s>S</s></button>
+          <div class="toolbar-divider"></div>
+          <button class="tbtn" title="H1" onmousedown="event.preventDefault(); fmtBlock('h1')">H1</button>
+          <button class="tbtn" title="H2" onmousedown="event.preventDefault(); fmtBlock('h2')">H2</button>
+          <button class="tbtn" title="H3" onmousedown="event.preventDefault(); fmtBlock('h3')">H3</button>
+          <button class="tbtn" title="Párrafo" onmousedown="event.preventDefault(); fmtBlock('p')">¶</button>
+          <div class="toolbar-divider"></div>
+          <button class="tbtn" title="Viñetas"  onmousedown="event.preventDefault(); insertList('insertUnorderedList')">•</button>
+          <button class="tbtn" title="Numerada" onmousedown="event.preventDefault(); insertList('insertOrderedList')">1.</button>
+          <button class="tbtn" title="Separador" onmousedown="event.preventDefault(); fmt('insertHorizontalRule')">—</button>
+          <div class="toolbar-divider"></div>
+          <button class="tbtn hl-btn" style="background:#FEF08A;" title="Amarillo"
+                  onmousedown="event.preventDefault(); applyHighlight('#FEF08A')">A</button>
+          <button class="tbtn hl-btn" style="background:#BBF7D0;" title="Verde"
+                  onmousedown="event.preventDefault(); applyHighlight('#BBF7D0')">A</button>
+          <button class="tbtn hl-btn" style="background:#BAE6FD;" title="Azul"
+                  onmousedown="event.preventDefault(); applyHighlight('#BAE6FD')">A</button>
+          <button class="tbtn hl-btn" style="background:#FBCFE8;" title="Rosa"
+                  onmousedown="event.preventDefault(); applyHighlight('#FBCFE8')">A</button>
+          <button class="tbtn hl-btn" style="background:#FCD34D;" title="Ámbar"
+                  onmousedown="event.preventDefault(); applyHighlight('#FCD34D')">A</button>
+          <button class="tbtn" title="Quitar resaltado"
+                  onmousedown="event.preventDefault(); removeHighlight()"
+                  style="font-size:0.75rem;">∅</button>
+          <div class="toolbar-divider"></div>
+          <button class="tbtn" title="Imagen" onmousedown="event.preventDefault(); insertEditorImage()">📎</button>
+          <button class="tbtn" title="Deshacer" onmousedown="event.preventDefault(); fmt('undo')">↩</button>
+          <button class="tbtn" title="Rehacer"  onmousedown="event.preventDefault(); fmt('redo')">↪</button>
+        </div>
+
+        <div id="editor-body" contenteditable="true"></div>
+
+      </div><!-- /note-editor-view -->
+    </div><!-- /notes-main -->
+
+  </div><!-- /tab-notas -->
+
+
+  <!-- ═══════════════════════
+       BIBLIA
+  ═══════════════════════ -->
+  <div id="tab-biblia" class="tab-section" style="display:none;">
+    <div id="bible-container">
+      <h2 class="section-title">📖 Biblia</h2>
+      <div id="bible-banner">
+        🌐 Conectado a bolls.life — RVR60 · NVI · NTV · LBLA · PDT
+      </div>
+      <div id="bible-controls">
+        <select id="bible-book" onchange="updateChapterOptions()"></select>
+        <select id="bible-chapter"></select>
+        <select id="bible-version" onchange="loadChapter()">
+          <option value="RVR60">RVR60</option>
+          <option value="NVI">NVI</option>
+          <option value="NTV">NTV</option>
+          <option value="LBLA">LBLA</option>
+          <option value="PDT">PDT</option>
+        </select>
+        <button class="accent-btn" onclick="loadChapter()">Ir →</button>
+      </div>
+      <div id="bible-nav">
+        <button class="ghost-btn" onclick="prevChapter()">← Anterior</button>
+        <button class="ghost-btn" onclick="nextChapter()">Siguiente →</button>
+      </div>
+      <div id="bible-content">
+        <p class="empty-msg">Seleccioná un libro y capítulo para comenzar a leer.</p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════
+       BOTÓN FLOTANTE nueva nota
+       (visible siempre que no estés editando)
+  ═══════════════════════ -->
+  <button id="fab-new-note" onclick="openNewNote()" title="Nueva nota">✍🏼</button>
+
+
+  <script src="app.js"></script>
+</body>
+</html>
