@@ -351,7 +351,17 @@ function populateFolderDropdown(selected) {
    9. NOTAS — carga y renderizado
 ───────────────────────────────── */
 function loadNotes() {
-  try { return JSON.parse(localStorage.getItem('hn_notes')) || []; }
+  try {
+    var notes = JSON.parse(localStorage.getItem('hn_notes')) || [];
+    var trash = loadTrash();
+    var trashIds = {};
+    for (var i = 0; i < trash.length; i++) trashIds[trash[i].id] = true;
+    var clean = notes.filter(function(note) {
+      return note && !note.deletedAt && !trashIds[note.id];
+    });
+    if (clean.length !== notes.length) localStorage.setItem('hn_notes', JSON.stringify(clean));
+    return clean;
+  }
   catch(e) { return []; }
 }
 
@@ -384,11 +394,18 @@ function renderSidebarNotes(filterFolder) {
     var preview = stripHtml(note.content || '').trim().slice(0, 55);
     var meta    = [note.date, note.speaker].filter(Boolean).join(' · ');
     item.innerHTML =
+      '<button class="sidebar-note-delete-btn" data-note-id="' + note.id + '" title="Mover a la papelera">🗑️</button>' +
       (note.pinned ? '<span class="pin-badge">📌</span>' : '') +
       '<div class="sidebar-note-title">' + (note.title || 'Sin título') + '</div>' +
       (meta    ? '<div class="sidebar-note-meta">' + meta + '</div>'       : '') +
       (preview ? '<div class="sidebar-note-preview">' + preview + '…</div>' : '');
-    item.onclick = (function(id) { return function() { openEditor(id); }; })(note.id);
+    item.onclick = (function(id) { return function(e) {
+      if (e && e.target && e.target.classList && e.target.classList.contains('sidebar-note-delete-btn')) {
+        deleteNoteById(e, id);
+        return;
+      }
+      openEditor(id);
+    }; })(note.id);
     cont.appendChild(item);
   });
 }
@@ -568,16 +585,123 @@ function togglePin() {
 }
 
 
+function moveNoteToTrash(noteId) {
+  var notes = loadNotes();
+  var noteToDelete = null;
+  var remaining = [];
+  for (var i = 0; i < notes.length; i++) {
+    if (notes[i].id === noteId) noteToDelete = notes[i];
+    else remaining.push(notes[i]);
+  }
+  if (!noteToDelete) return false;
+  noteToDelete.deletedAt = new Date().toISOString();
+
+  var trash = loadTrash().filter(function(n) { return n.id !== noteId; });
+  trash.push(noteToDelete);
+  saveTrash(trash);
+  localStorage.setItem('hn_notes', JSON.stringify(remaining));
+
+  if (currentNoteId === noteId) {
+    currentNoteId = null;
+    activeNoteId = null;
+    closeEditor();
+  } else {
+    renderNotesList(currentFolder);
+    renderSidebarNotes(currentFolder);
+    renderFolderList();
+  }
+  renderTrashSection();
+  return true;
+}
+
+
+
 /* ─────────────────────────────────
-   13. ELIMINAR NOTA
+   13. ELIMINAR NOTA → PAPELERA
 ───────────────────────────────── */
 function deleteNoteById(event, noteId) {
-  event.stopPropagation();
-  if (!confirm('¿Eliminar esta nota? No se puede deshacer.')) return;
-  var notes = loadNotes().filter(function(n) { return n.id !== noteId; });
+  if (event) event.stopPropagation();
+  if (!confirm('¿Querés mover esta nota a la papelera?')) return;
+  moveNoteToTrash(noteId);
+}
+
+
+/* ─────────────────────────────────
+   13b. PAPELERA DE RECICLAJE
+───────────────────────────────── */
+var trashOpen = false;
+
+function loadTrash() {
+  try { return JSON.parse(localStorage.getItem('hn_trash')) || []; }
+  catch(e) { return []; }
+}
+function saveTrash(trash) { localStorage.setItem('hn_trash', JSON.stringify(trash)); }
+
+function cleanupTrash() {
+  var now = Date.now();
+  var TEN_DAYS = 10 * 24 * 60 * 60 * 1000;
+  var trash = loadTrash().filter(function(n) {
+    return (now - new Date(n.deletedAt).getTime()) < TEN_DAYS;
+  });
+  saveTrash(trash);
+}
+
+function toggleTrash() {
+  trashOpen = !trashOpen;
+  var cont  = document.getElementById('trash-container');
+  var arrow = document.getElementById('trash-arrow');
+  if (!cont || !arrow) return;
+  if (trashOpen) { cont.style.maxHeight = '400px'; cont.style.overflow = 'auto'; arrow.textContent = '▼'; }
+  else           { cont.style.maxHeight = '0';     cont.style.overflow = 'hidden'; arrow.textContent = '▶'; }
+  localStorage.setItem('hn_trash_open', trashOpen ? '1' : '0');
+}
+
+function renderTrashSection() {
+  var list  = document.getElementById('trash-notes-list'); if (!list) return;
+  var count = document.getElementById('trash-count');
+  var trash = loadTrash();
+  if (count) count.textContent = trash.length || '';
+  if (!trash.length) {
+    list.innerHTML = '<p style="color:var(--text3);font-size:11px;padding:8px 6px;text-align:center;">Papelera vacía</p>';
+    return;
+  }
+  list.innerHTML = '';
+  trash.slice().reverse().forEach(function(note) {
+    var item = document.createElement('div');
+    item.className = 'trash-note-item';
+    var daysLeft = Math.max(0, 10 - Math.floor((Date.now() - new Date(note.deletedAt).getTime()) / (1000*60*60*24)));
+    item.innerHTML =
+      '<div class="trash-note-title">' + (note.title || 'Sin título') + '</div>' +
+      '<div class="trash-note-meta">Se elimina en ' + daysLeft + ' día' + (daysLeft !== 1 ? 's' : '') + '</div>' +
+      '<div class="trash-note-actions">' +
+        '<button class="trash-restore-btn" onclick="restoreNote(\'' + note.id + '\')" title="Restaurar">↩</button>' +
+        '<button class="trash-delete-btn"  onclick="permanentlyDeleteNote(\'' + note.id + '\')" title="Eliminar definitivamente">🗑️</button>' +
+      '</div>';
+    list.appendChild(item);
+  });
+}
+
+function restoreNote(noteId) {
+  var trash = loadTrash(); var noteIdx = -1;
+  for (var i = 0; i < trash.length; i++) if (trash[i].id === noteId) { noteIdx = i; break; }
+  if (noteIdx === -1) return;
+  var note = trash[noteIdx]; delete note.deletedAt;
+  var notes = loadNotes(); notes.push(note);
   localStorage.setItem('hn_notes', JSON.stringify(notes));
-  if (currentNoteId === noteId) closeEditor();
+  trash.splice(noteIdx, 1); saveTrash(trash);
   renderNotesList(currentFolder); renderSidebarNotes(currentFolder); renderFolderList();
+  renderTrashSection();
+}
+
+function permanentlyDeleteNote(noteId) {
+  if (!confirm('¿Eliminar permanentemente? No se puede deshacer.')) return;
+  saveTrash(loadTrash().filter(function(n) { return n.id !== noteId; }));
+  renderTrashSection();
+}
+
+function emptyTrash() {
+  if (!confirm('¿Vaciar toda la papelera? No se puede deshacer.')) return;
+  saveTrash([]); renderTrashSection();
 }
 
 
@@ -1138,6 +1262,204 @@ function toggleSidebarNotes() {
 }
 
 
+function getNearestTag(node, tagName) {
+  var cur = node;
+  var target = String(tagName || '').toUpperCase();
+  while (cur && cur !== document.body) {
+    if (cur.tagName && cur.tagName.toUpperCase() === target) return cur;
+    cur = cur.parentNode;
+  }
+  return null;
+}
+
+function getCurrentLineText(range) {
+  var node = range.startContainer;
+  var offset = range.startOffset;
+  if (node.nodeType === 3) return node.textContent.slice(0, offset);
+  return (node.textContent || '').slice(0, offset);
+}
+
+function getListItemNumber(li) {
+  if (!li || !li.parentNode) return 1;
+  var ol = li.parentNode;
+  if (!ol.tagName || ol.tagName.toLowerCase() !== 'ol') return 1;
+  var start = parseInt(ol.getAttribute('start') || '1', 10);
+  var items = Array.prototype.slice.call(ol.children).filter(function(child) {
+    return child.tagName && child.tagName.toLowerCase() === 'li';
+  });
+  var idx = items.indexOf(li);
+  return (idx >= 0 ? start + idx : start);
+}
+
+function findPreviousOrderedListElement(node, root) {
+  var cur = node;
+  while (cur && cur !== root) {
+    var prev = cur.previousSibling;
+    while (prev) {
+      if (prev.nodeType === 1) {
+        if (prev.tagName && prev.tagName.toLowerCase() === 'ol') return prev;
+        var nested = prev.querySelector && prev.querySelector('ol:last-of-type');
+        if (nested) return nested;
+      }
+      prev = prev.previousSibling;
+    }
+    cur = cur.parentNode;
+  }
+  return null;
+}
+
+function getLastOrderedListNumber(ol) {
+  if (!ol) return 1;
+  var items = Array.prototype.slice.call(ol.children).filter(function(child) {
+    return child.tagName && child.tagName.toLowerCase() === 'li';
+  });
+  var start = parseInt(ol.getAttribute('start') || '1', 10);
+  return start + Math.max(0, items.length - 1);
+}
+
+function setCursorInsideStart(el) {
+  if (!el) return;
+  var range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(true);
+  var sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  savedRange = range.cloneRange();
+}
+
+function continueOrderedListFromParagraph() {
+  var editor = document.getElementById('editor-body');
+  var sel = window.getSelection();
+  if (!editor || !sel || !sel.rangeCount) return false;
+  var range = sel.getRangeAt(0);
+  if (!range.collapsed) return false;
+
+  var paragraph = getNearestTag(range.startContainer, 'P');
+  if (!paragraph || !paragraph.parentNode) return false;
+  var text = (paragraph.textContent || '').trim();
+  if (text === '') return false;
+
+  var endRange = range.cloneRange();
+  endRange.selectNodeContents(paragraph);
+  endRange.collapse(false);
+  if (range.compareBoundaryPoints(Range.END_TO_END, endRange) !== 0) return false;
+
+  var prevOl = findPreviousOrderedListElement(paragraph, editor);
+  if (!prevOl) return false;
+
+  var nextNumber = getLastOrderedListNumber(prevOl) + 1;
+  var newOl = document.createElement('ol');
+  newOl.setAttribute('start', String(nextNumber));
+  var li = document.createElement('li');
+  li.innerHTML = '<br>';
+  newOl.appendChild(li);
+
+  if (paragraph.nextSibling) paragraph.parentNode.insertBefore(newOl, paragraph.nextSibling);
+  else paragraph.parentNode.appendChild(newOl);
+
+  setCursorInsideStart(li);
+  return true;
+}
+
+function handleOrderedListShortcut(e) {
+  return false;
+}
+
+function handleOrderedListShortcut_legacy(e) {
+  if (e.key === ' ') {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return false;
+    var range = sel.getRangeAt(0);
+    var lineText = getCurrentLineText(range);
+    var m = lineText.match(/^\s*(\d+)\.$/);
+    if (!m) return false;
+
+    e.preventDefault();
+    var startNum = parseInt(m[1], 10);
+    try {
+      if (range.startContainer.nodeType === 3) {
+        var node = range.startContainer;
+        var offset = range.startOffset;
+        var deleteRange = document.createRange();
+        deleteRange.setStart(node, Math.max(0, offset - m[0].length));
+        deleteRange.setEnd(node, offset);
+        deleteRange.deleteContents();
+        sel.removeAllRanges();
+        sel.addRange(deleteRange);
+      }
+      document.execCommand('insertOrderedList', false, null);
+      var li = getNearestTag(sel.anchorNode, 'LI');
+      var ol = getNearestTag(sel.anchorNode, 'OL');
+      if (ol && startNum !== 1) ol.setAttribute('start', String(startNum));
+      if (li && li.textContent.trim()) {
+        li.innerHTML = li.innerHTML.replace(/^\s*\d+\.\s*/, '');
+      }
+      saveSelection();
+      return true;
+    } catch(err) {
+      return false;
+    }
+  }
+
+  if (e.key === 'Enter' && !e.shiftKey) {
+    var resumed = continueOrderedListFromParagraph();
+    if (resumed) e.preventDefault();
+    return resumed;
+  }
+
+  return false;
+}
+
+
+
+
+function normalizePastedText(text) {
+  return (text || '').replace(/\r\n?/g, '\n');
+}
+
+function escapeHtmlText(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function convertPlainTextToEditorHtml(text) {
+  var normalized = normalizePastedText(text);
+  if (!normalized.trim()) return '';
+
+  var blocks = normalized.split(/\n{2,}/);
+  var html = blocks.map(function(block) {
+    var safe = escapeHtmlText(block).replace(/\n/g, '<br>');
+    return '<p>' + safe + '</p>';
+  }).join('');
+
+  return html;
+}
+
+function handlePlainTextPaste(e) {
+  if (!e) return;
+  e.preventDefault();
+
+  var text = '';
+  if (e.clipboardData && typeof e.clipboardData.getData === 'function') {
+    text = e.clipboardData.getData('text/plain') || '';
+  } else if (window.clipboardData && typeof window.clipboardData.getData === 'function') {
+    text = window.clipboardData.getData('Text') || '';
+  }
+
+  var html = convertPlainTextToEditorHtml(text);
+  if (!html) return;
+
+  restoreSelection();
+  document.execCommand('insertHTML', false, html);
+  saveSelection();
+  scheduleAutoSave();
+}
+
 /* ─────────────────────────────────
    20. SLASH COMMAND
 ───────────────────────────────── */
@@ -1251,6 +1573,188 @@ function insertVerseBlock(result) {
     var sel2 = window.getSelection(); sel2.removeAllRanges(); sel2.addRange(range);
     savedRange = range.cloneRange();
   }
+}
+
+
+/* ─────────────────────────────────
+   20b. EDITAR VERSÍCULO (click sobre bloque)
+───────────────────────────────── */
+var currentVerseWrapper = null;
+var verseEditDebounce   = null;
+
+function openVerseEditModal(wrapper) {
+  var existing = document.getElementById('verse-edit-modal');
+  if (existing) existing.remove();
+  currentVerseWrapper = wrapper;
+
+  /* Parsear referencia actual */
+  var refEl   = wrapper.querySelector('.verse-reference');
+  var textEl  = wrapper.querySelector('.verse-text');
+  var refText = refEl  ? refEl.textContent.trim()  : '';
+  var curText = textEl ? textEl.textContent.trim()  : '';
+
+  /* "JUAN 3:16 — RVR60" o "JUAN 3:16-18 — NVI" */
+  var match = refText.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?\s*[—\-–]\s*(\S+)$/i);
+  var curBook = 'Juan', curChap = 3, curVsS = 16, curVsE = 16, curVer = 'RVR60';
+  if (match) {
+    var bookRaw = match[1].trim();
+    for (var bi = 0; bi < ALL_BOOKS.length; bi++) {
+      if (normalizeStr(ALL_BOOKS[bi]) === normalizeStr(bookRaw)) { curBook = ALL_BOOKS[bi]; break; }
+    }
+    curChap = parseInt(match[2]);
+    curVsS  = parseInt(match[3]);
+    curVsE  = match[4] ? parseInt(match[4]) : curVsS;
+    var vRaw = match[5].toUpperCase().replace('RV1960','RVR60');
+    if (['RVR60','NVI','NTV','LBLA','PDT'].indexOf(vRaw) !== -1) curVer = vRaw;
+  }
+
+  /* Helpers para options */
+  function bookOpts() {
+    return ALL_BOOKS.map(function(b) {
+      return '<option value="' + b + '"' + (b === curBook ? ' selected' : '') + '>' + b + '</option>';
+    }).join('');
+  }
+  function chapOpts(max, sel) {
+    var s = ''; for (var c = 1; c <= max; c++) s += '<option value="' + c + '"' + (c === sel ? ' selected' : '') + '>' + c + '</option>'; return s;
+  }
+  function verseOpts(sel) {
+    var s = ''; for (var v = 1; v <= 200; v++) s += '<option value="' + v + '"' + (v === sel ? ' selected' : '') + '>' + v + '</option>'; return s;
+  }
+  var maxChap = CHAPTER_COUNTS[curBook] || 150;
+
+  var VERSIONS = ['RVR60','NVI','NTV','LBLA','PDT'];
+  var verOpts = VERSIONS.map(function(v) {
+    return '<option value="' + v + '"' + (v === curVer ? ' selected' : '') + '>' + v + '</option>';
+  }).join('');
+
+  var modal = document.createElement('div');
+  modal.id = 'verse-edit-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;';
+
+  modal.innerHTML =
+    '<div style="background:var(--card);border-radius:18px;width:360px;max-width:96vw;box-shadow:0 10px 50px rgba(0,0,0,0.35);overflow:hidden;font-family:\'DM Sans\',sans-serif;">' +
+
+      /* ── Preview ── */
+      '<div style="background:var(--bg2);padding:14px 16px 13px;position:relative;min-height:70px;">' +
+        '<div id="ve-ref-disp" style="font-size:10px;font-weight:700;color:var(--accent);letter-spacing:0.07em;text-transform:uppercase;margin-bottom:5px;">' + (refText || 'Versículo') + '</div>' +
+        '<p   id="ve-text-prev" style="font-size:13px;font-style:italic;color:var(--text2);line-height:1.55;margin:0;max-height:72px;overflow-y:auto;">' + curText + '</p>' +
+        '<div id="ve-loading" style="display:none;position:absolute;bottom:8px;right:12px;font-size:10px;color:var(--text3);">⏳ cargando…</div>' +
+        '<button onclick="closeVerseEditModal()" style="position:absolute;top:9px;right:12px;background:none;border:none;cursor:pointer;font-size:19px;color:var(--text3);line-height:1;padding:0;">×</button>' +
+      '</div>' +
+
+      /* ── Título ── */
+      '<div style="padding:13px 16px 6px;display:flex;align-items:center;gap:7px;">' +
+        '<span style="font-size:14px;">✍️</span>' +
+        '<span style="font-weight:700;font-size:13px;color:var(--text);">Escritura</span>' +
+      '</div>' +
+
+      /* ── Selectores ── */
+      '<div style="padding:4px 16px 14px;display:flex;align-items:center;gap:5px;flex-wrap:nowrap;">' +
+        '<select id="ve-book"    onchange="onVEChange()" style="flex:3;min-width:0;padding:7px 6px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;">' + bookOpts() + '</select>' +
+        '<select id="ve-chap"    onchange="onVEChange()" style="width:48px;padding:7px 3px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;text-align:center;">' + chapOpts(maxChap, curChap) + '</select>' +
+        '<span style="color:var(--text2);font-weight:700;font-size:14px;">:</span>' +
+        '<select id="ve-vs"      onchange="onVEChange()" style="width:48px;padding:7px 3px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;text-align:center;">' + verseOpts(curVsS) + '</select>' +
+        '<span style="color:var(--text3);font-size:13px;">-</span>' +
+        '<select id="ve-ve"      onchange="onVEChange()" style="width:48px;padding:7px 3px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;text-align:center;">' + verseOpts(curVsE) + '</select>' +
+        '<select id="ve-ver"     onchange="onVEChange()" style="width:68px;padding:7px 4px;border-radius:8px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;">' + verOpts + '</select>' +
+      '</div>' +
+
+      /* ── Botón ── */
+      '<div style="padding:0 16px 16px;">' +
+        '<button id="ve-update-btn" onclick="confirmUpdateVerse()" ' +
+          'style="width:100%;padding:11px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-weight:700;font-size:14px;cursor:pointer;">✓ Actualizar versículo</button>' +
+      '</div>' +
+    '</div>';
+
+  modal.addEventListener('click', function(e) { if (e.target === modal) closeVerseEditModal(); });
+  document.body.appendChild(modal);
+}
+
+function closeVerseEditModal() {
+  var m = document.getElementById('verse-edit-modal');
+  if (m) m.remove();
+  currentVerseWrapper = null;
+  if (verseEditDebounce) { clearTimeout(verseEditDebounce); verseEditDebounce = null; }
+}
+
+function onVEChange() {
+  var bSel  = document.getElementById('ve-book');
+  var chSel = document.getElementById('ve-chap');
+  var vsSel = document.getElementById('ve-vs');
+  var veSel = document.getElementById('ve-ve');
+  var verSel= document.getElementById('ve-ver');
+  if (!bSel) return;
+
+  var book = bSel.value;
+  var chap = parseInt(chSel.value);
+  var vsS  = parseInt(vsSel.value);
+  var vsE  = parseInt(veSel.value);
+  var ver  = verSel.value;
+
+  /* Si cambia el libro, regenerar capítulos */
+  var maxChap = CHAPTER_COUNTS[book] || 150;
+  if (chap > maxChap) {
+    var newOpts = ''; for (var c = 1; c <= maxChap; c++) newOpts += '<option value="' + c + '"' + (c === 1 ? ' selected' : '') + '>' + c + '</option>';
+    chSel.innerHTML = newOpts; chap = 1; vsSel.value = 1; veSel.value = 1; vsS = 1; vsE = 1;
+  }
+
+  /* Actualizar referencia en el preview */
+  var refDisp = document.getElementById('ve-ref-disp');
+  if (refDisp) {
+    var rStr = (vsS === vsE) ? (book + ' ' + chap + ':' + vsS) : (book + ' ' + chap + ':' + vsS + '-' + vsE);
+    refDisp.textContent = rStr + ' — ' + ver;
+  }
+
+  /* Fetch con debounce */
+  if (verseEditDebounce) clearTimeout(verseEditDebounce);
+  var loading = document.getElementById('ve-loading');
+  if (loading) loading.style.display = 'block';
+  verseEditDebounce = setTimeout(function() {
+    var b2   = document.getElementById('ve-book').value;
+    var ch2  = parseInt(document.getElementById('ve-chap').value);
+    var vs2  = parseInt(document.getElementById('ve-vs').value);
+    var ve2  = parseInt(document.getElementById('ve-ve').value);
+    var ver2 = document.getElementById('ve-ver').value;
+    var p = (vs2 === ve2) ? fetchVerse(b2, ch2, vs2, ver2) : fetchVerseRange(b2, ch2, vs2, ve2, ver2);
+    p.then(function(result) {
+      var ld = document.getElementById('ve-loading'); if (ld) ld.style.display = 'none';
+      var prev = document.getElementById('ve-text-prev');
+      if (prev) prev.textContent = (result && !result.error) ? result.text : ('⚠️ ' + (result ? result.error : 'Error'));
+    });
+  }, 600);
+}
+
+function confirmUpdateVerse() {
+  var bSel  = document.getElementById('ve-book');
+  var chSel = document.getElementById('ve-chap');
+  var vsSel = document.getElementById('ve-vs');
+  var veSel = document.getElementById('ve-ve');
+  var verSel= document.getElementById('ve-ver');
+  if (!bSel || !currentVerseWrapper) return;
+
+  var book = bSel.value, chap = parseInt(chSel.value);
+  var vsS  = parseInt(vsSel.value), vsE = parseInt(veSel.value);
+  var ver  = verSel.value;
+
+  var btn = document.getElementById('ve-update-btn');
+  if (btn) { btn.textContent = '⏳ Actualizando…'; btn.disabled = true; }
+  var ld = document.getElementById('ve-loading'); if (ld) ld.style.display = 'block';
+
+  var p = (vsS === vsE) ? fetchVerse(book, chap, vsS, ver) : fetchVerseRange(book, chap, vsS, vsE, ver);
+  var wrapperRef = currentVerseWrapper;
+  p.then(function(result) {
+    var ld2 = document.getElementById('ve-loading'); if (ld2) ld2.style.display = 'none';
+    if (result.error) {
+      if (btn) { btn.textContent = '✓ Actualizar versículo'; btn.disabled = false; }
+      alert(result.error); return;
+    }
+    var refEl2 = wrapperRef.querySelector('.verse-reference');
+    var txtEl2 = wrapperRef.querySelector('.verse-text');
+    if (refEl2) refEl2.textContent = result.reference;
+    if (txtEl2) txtEl2.textContent = result.text;
+    closeVerseEditModal();
+    scheduleAutoSave();
+  });
 }
 
 
@@ -1576,11 +2080,15 @@ window.onload = function() {
     if (cont) { cont.style.maxHeight = '600px'; cont.style.overflow = 'auto'; }
   }
 
-  /* Nota de ejemplo — siempre actualizar */
+  /* Nota de ejemplo — crear solo si no existe y no está en papelera */
   var notes = loadNotes(); var exIdx = -1;
+  var trash = loadTrash(); var exampleInTrash = false;
   for (var i = 0; i < notes.length; i++) if (notes[i].id === 'example_001') { exIdx = i; break; }
-  if (exIdx >= 0) notes[exIdx] = EXAMPLE_NOTE; else notes.unshift(EXAMPLE_NOTE);
-  localStorage.setItem('hn_notes', JSON.stringify(notes));
+  for (var j = 0; j < trash.length; j++) if (trash[j].id === 'example_001') { exampleInTrash = true; break; }
+  if (exIdx === -1 && !exampleInTrash) {
+    notes.unshift(EXAMPLE_NOTE);
+    localStorage.setItem('hn_notes', JSON.stringify(notes));
+  }
 
   /* FAB */
   updateFAB();
@@ -1619,44 +2127,19 @@ window.onload = function() {
       if ((e.ctrlKey||e.metaKey) && e.key==='b') { e.preventDefault(); fmt('bold'); }
       if ((e.ctrlKey||e.metaKey) && e.key==='i') { e.preventDefault(); fmt('italic'); }
       if ((e.ctrlKey||e.metaKey) && e.key==='u') { e.preventDefault(); fmt('underline'); }
-      /* AUTO-LISTA NUMERADA: escribir "N." + Espacio al inicio de línea */
-      if (e.key === ' ') {
-        var sel = window.getSelection();
-        if (!sel || !sel.rangeCount) return;
-        var range  = sel.getRangeAt(0);
-        var node   = range.startContainer;
-        var offset = range.startOffset;
-        var lineText = '';
-        if (node.nodeType === 3) lineText = node.textContent.slice(0, offset);
-        else lineText = (node.innerText || node.textContent || '').slice(0, offset);
-        var m = lineText.match(/^(\s*)(\d+)\.$/);
-        if (m) {
-          e.preventDefault();
-          var startNum = parseInt(m[2]);
-          var deleteRange = document.createRange();
-          deleteRange.setStart(node, offset - m[2].length - 1);
-          deleteRange.setEnd(node, offset);
-          deleteRange.deleteContents();
-          sel.removeAllRanges(); sel.addRange(deleteRange);
-          document.execCommand('insertOrderedList', false, null);
-          if (startNum !== 1) {
-            var cur = sel.anchorNode; var par = cur;
-            for (var att = 0; att < 8; att++) {
-              if (!par) break;
-              if (par.tagName && par.tagName.toLowerCase() === 'ol') { par.setAttribute('start', startNum); break; }
-              par = par.parentNode;
-            }
-          }
-          saveSelection();
-        }
-      }
-    })
+    });
+
+    editorBody.addEventListener('paste', function(e) {
+      handlePlainTextPaste(e);
+    });
+
     /* Auto-guardado al escribir */
     editorBody.addEventListener('input', function() { scheduleAutoSave(); });
 
     /* Event delegation botón × de versículos */
     editorBody.addEventListener('click', function(e) {
       var target = e.target;
+      /* ── Delete btn ── */
       for (var i = 0; i < 6; i++) {
         if (!target || target === editorBody) break;
         if (target.classList && target.classList.contains('block-delete-btn')) {
@@ -1675,6 +2158,20 @@ window.onload = function() {
           return false;
         }
         target = target.parentNode;
+      }
+      /* ── Click en verse-block → editar ── */
+      var vt = e.target;
+      for (var j = 0; j < 6; j++) {
+        if (!vt || vt === editorBody) break;
+        if (vt.classList && vt.classList.contains('verse-block')) {
+          var vw = vt.parentNode;
+          if (vw && vw.classList.contains('verse-block-wrapper')) {
+            e.preventDefault(); e.stopPropagation();
+            openVerseEditModal(vw);
+          }
+          return false;
+        }
+        vt = vt.parentNode;
       }
     }, true);
   }
@@ -1716,6 +2213,12 @@ window.onload = function() {
     folderListOpen = false; // toggleFolderList invierte, así que arrancamos en false
     toggleFolderList();     // esto lo pone en true (abierto)
   }
+
+  /* Papelera — limpiar notas vencidas */
+  cleanupTrash();
+  var trashOpenState = localStorage.getItem('hn_trash_open');
+  if (trashOpenState === '1') { trashOpen = false; toggleTrash(); }
+  renderTrashSection();
 
   /* Renderizado inicial */
   populateBibleSelectors();
