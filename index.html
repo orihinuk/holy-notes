@@ -102,6 +102,21 @@
         </div>
       </div>
 
+      <!-- Papelera de reciclaje -->
+      <div id="sidebar-trash-section">
+        <div class="sidebar-section-header" onclick="toggleTrash()">
+          <span>🗑️ Papelera</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="trash-count" class="sidebar-count"></span>
+            <span id="trash-arrow">▶</span>
+          </div>
+        </div>
+        <div id="trash-container" style="max-height:0;overflow:hidden;transition:max-height 0.25s ease;">
+          <div id="trash-notes-list"></div>
+          <button class="empty-trash-btn" onclick="emptyTrash()">🗑️ Vaciar papelera</button>
+        </div>
+      </div>
+
     </div><!-- /main-sidebar -->
 
 
