@@ -284,6 +284,18 @@ input::placeholder { color: var(--text3); }
 .sidebar-note-item.active { background: var(--accent-light); border-left-color: var(--accent); }
 .sidebar-note-item.pinned { border-left-color: var(--accent); }
 
+.sidebar-note-delete-btn {
+  position: absolute; top: 6px; right: 6px;
+  background: none; border: none;
+  color: var(--text3); font-size: 12px;
+  padding: 2px 4px; border-radius: 4px;
+  opacity: 0; transition: opacity 0.15s, color 0.15s, background 0.15s;
+  z-index: 2;
+}
+.sidebar-note-item:hover .sidebar-note-delete-btn { opacity: 1; }
+.sidebar-note-delete-btn:hover { color: var(--danger); background: var(--danger-light); }
+.sidebar-note-item .pin-badge { right: 28px; }
+
 .sidebar-note-title {
   font-size: 13px; font-weight: 600; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -497,6 +509,11 @@ input::placeholder { color: var(--text3); }
   background: rgba(245,158,11,0.07); border-left: 3px solid var(--accent);
   border-radius: 0 var(--radius) var(--radius) 0;
   padding: 11px 40px 11px 14px; margin: 0; user-select: text;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.verse-block:hover {
+  background: rgba(245,158,11,0.14);
 }
 .verse-reference {
   display: block; font-weight: 700; color: var(--accent);
@@ -694,8 +711,81 @@ input::placeholder { color: var(--text3); }
 .nf-color-btn.selected { border-color: #fff; box-shadow: 0 0 0 2px currentColor; }
 
 /* ─────────────────────────────────────────
-   MODO PRESENTACIÓN
+   PAPELERA DE RECICLAJE
 ───────────────────────────────────────── */
+#sidebar-trash-section {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 2px;
+}
+
+.trash-note-item {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  margin: 2px 4px;
+  transition: background 0.12s;
+}
+.trash-note-item:hover { background: var(--bg2); }
+
+.trash-note-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.trash-note-meta {
+  font-size: 10px;
+  color: var(--text3);
+  margin: 1px 0 4px;
+}
+.trash-note-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 3px;
+}
+.trash-restore-btn {
+  font-size: 11px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 8px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.trash-restore-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+.trash-delete-btn {
+  font-size: 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.trash-delete-btn:hover { background: var(--danger-light); color: var(--danger); border-color: var(--danger); }
+
+.empty-trash-btn {
+  width: calc(100% - 16px);
+  margin: 6px 8px 10px;
+  padding: 6px 10px;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text3);
+  cursor: pointer;
+  display: block;
+  text-align: center;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.empty-trash-btn:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-light); }
+
 #presentation-content h1 {
   font-size: 2rem; font-weight: 700;
   margin: 24px 0 10px; line-height: 1.2; color: var(--text);
