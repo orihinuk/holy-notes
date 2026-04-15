@@ -1882,6 +1882,36 @@ window.onload = function() {
     editorBody.addEventListener('keyup',     saveSelection);
     editorBody.addEventListener('mousedown', saveSelection);
     editorBody.addEventListener('keypress', function(e) { if (e.key === '/') setTimeout(showSlashPopup, 20); });
+    editorBody.addEventListener('paste', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var text = '';
+      if (e.clipboardData && typeof e.clipboardData.getData === 'function') text = e.clipboardData.getData('text/plain') || '';
+      else if (window.clipboardData && typeof window.clipboardData.getData === 'function') text = window.clipboardData.getData('Text') || '';
+      if (!text) return;
+      restoreSelection();
+      try {
+        document.execCommand('insertText', false, text);
+      } catch(err) {
+        var sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return;
+        var range = sel.getRangeAt(0);
+        range.deleteContents();
+        var lines = text.replace(/
+/g, '\n').replace(//g, '\n').split('\n');
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < lines.length; i++) {
+          if (i > 0) frag.appendChild(document.createElement('br'));
+          frag.appendChild(document.createTextNode(lines[i]));
+        }
+        range.insertNode(frag);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      saveSelection();
+      scheduleAutoSave();
+    });
     editorBody.addEventListener('keydown', function(e) {
       if ((e.ctrlKey||e.metaKey) && e.key==='s') { e.preventDefault(); saveNote(false); clearAutoSave(); }
       if ((e.ctrlKey||e.metaKey) && e.key==='b') { e.preventDefault(); fmt('bold'); }

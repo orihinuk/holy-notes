@@ -7,42 +7,44 @@
    VARIABLES
 ───────────────── */
 :root {
-  --bg:           #F7F5F0;
-  --bg2:          #EDEAE3;
-  --card:         #FFFFFF;
-  --sidebar-bg:   #F0EDE6;
-  --toolbar-bg:   #F0EDE6;
-  --text:         #1C1C1E;
-  --text2:        #6B6B70;
-  --text3:        #9A9A9F;
-  --border:       #E0DCD4;
-  --accent:       #F59E0B;
-  --accent-hover: #D97706;
-  --accent-light: rgba(245,158,11,0.12);
-  --danger:       #EF4444;
-  --danger-light: rgba(239,68,68,0.09);
-  --shadow:       0 1px 8px rgba(0,0,0,0.07);
-  --shadow-md:    0 4px 20px rgba(0,0,0,0.11);
+  --bg:           #FFFCF2;
+  --bg2:          #F3EFE3;
+  --card:         #FFFDF7;
+  --sidebar-bg:   #F6F1E7;
+  --toolbar-bg:   #F6F1E7;
+  --text:         #2B2675;
+  --text2:        #6E67A8;
+  --text3:        #9A91CC;
+  --border:       #DDD6F2;
+  --accent:       #2B2675;
+  --accent-hover: #A99BF7;
+  --accent-light: rgba(169,155,247,0.18);
+  --danger:       #E88E3D;
+  --danger-light: rgba(232,142,61,0.14);
+  --shadow:       0 1px 8px rgba(43,38,117,0.08);
+  --shadow-md:    0 4px 20px rgba(43,38,117,0.12);
   --radius:       10px;
   --radius-sm:    6px;
   --sidebar-w:    260px;
 }
 
 [data-theme="dark"] {
-  --bg:           #1C1C1E;
-  --bg2:          #2C2C2E;
-  --card:         #2C2C2E;
-  --sidebar-bg:   #1C1C1E;
-  --toolbar-bg:   #2C2C2E;
-  --text:         #F2F2F7;
-  --text2:        #AEAEB2;
-  --text3:        #636366;
-  --border:       #38383A;
-  --accent:       #F59E0B;
-  --accent-hover: #FBBF24;
-  --accent-light: rgba(245,158,11,0.15);
-  --shadow:       0 1px 8px rgba(0,0,0,0.3);
-  --shadow-md:    0 4px 20px rgba(0,0,0,0.4);
+  --bg:           #2B2675;
+  --bg2:          #3A338A;
+  --card:         #3A338A;
+  --sidebar-bg:   #241F63;
+  --toolbar-bg:   #3A338A;
+  --text:         #FFFCF2;
+  --text2:        #E6EAFF;
+  --text3:        #CFC6FF;
+  --border:       #6E67A8;
+  --accent:       #D1D84E;
+  --accent-hover: #E88E3D;
+  --accent-light: rgba(209,216,78,0.18);
+  --danger:       #E88E3D;
+  --danger-light: rgba(232,142,61,0.18);
+  --shadow:       0 1px 8px rgba(0,0,0,0.28);
+  --shadow-md:    0 4px 20px rgba(0,0,0,0.38);
 }
 
 /* ─────────────────
