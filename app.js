@@ -351,17 +351,7 @@ function populateFolderDropdown(selected) {
    9. NOTAS — carga y renderizado
 ───────────────────────────────── */
 function loadNotes() {
-  try {
-    var notes = JSON.parse(localStorage.getItem('hn_notes')) || [];
-    var trash = loadTrash();
-    var trashIds = {};
-    for (var i = 0; i < trash.length; i++) trashIds[trash[i].id] = true;
-    var clean = notes.filter(function(note) {
-      return note && !note.deletedAt && !trashIds[note.id];
-    });
-    if (clean.length !== notes.length) localStorage.setItem('hn_notes', JSON.stringify(clean));
-    return clean;
-  }
+  try { return JSON.parse(localStorage.getItem('hn_notes')) || []; }
   catch(e) { return []; }
 }
 
@@ -394,18 +384,11 @@ function renderSidebarNotes(filterFolder) {
     var preview = stripHtml(note.content || '').trim().slice(0, 55);
     var meta    = [note.date, note.speaker].filter(Boolean).join(' · ');
     item.innerHTML =
-      '<button class="sidebar-note-delete-btn" data-note-id="' + note.id + '" title="Mover a la papelera">🗑️</button>' +
       (note.pinned ? '<span class="pin-badge">📌</span>' : '') +
       '<div class="sidebar-note-title">' + (note.title || 'Sin título') + '</div>' +
       (meta    ? '<div class="sidebar-note-meta">' + meta + '</div>'       : '') +
       (preview ? '<div class="sidebar-note-preview">' + preview + '…</div>' : '');
-    item.onclick = (function(id) { return function(e) {
-      if (e && e.target && e.target.classList && e.target.classList.contains('sidebar-note-delete-btn')) {
-        deleteNoteById(e, id);
-        return;
-      }
-      openEditor(id);
-    }; })(note.id);
+    item.onclick = (function(id) { return function() { openEditor(id); }; })(note.id);
     cont.appendChild(item);
   });
 }
@@ -585,44 +568,23 @@ function togglePin() {
 }
 
 
-function moveNoteToTrash(noteId) {
-  var notes = loadNotes();
-  var noteToDelete = null;
-  var remaining = [];
-  for (var i = 0; i < notes.length; i++) {
-    if (notes[i].id === noteId) noteToDelete = notes[i];
-    else remaining.push(notes[i]);
-  }
-  if (!noteToDelete) return false;
-  noteToDelete.deletedAt = new Date().toISOString();
-
-  var trash = loadTrash().filter(function(n) { return n.id !== noteId; });
-  trash.push(noteToDelete);
-  saveTrash(trash);
-  localStorage.setItem('hn_notes', JSON.stringify(remaining));
-
-  if (currentNoteId === noteId) {
-    currentNoteId = null;
-    activeNoteId = null;
-    closeEditor();
-  } else {
-    renderNotesList(currentFolder);
-    renderSidebarNotes(currentFolder);
-    renderFolderList();
-  }
-  renderTrashSection();
-  return true;
-}
-
-
-
 /* ─────────────────────────────────
    13. ELIMINAR NOTA → PAPELERA
 ───────────────────────────────── */
 function deleteNoteById(event, noteId) {
-  if (event) event.stopPropagation();
-  if (!confirm('¿Querés mover esta nota a la papelera?')) return;
-  moveNoteToTrash(noteId);
+  event.stopPropagation();
+  if (!confirm('¿Mover esta nota a la papelera?')) return;
+  var notes = loadNotes();
+  var noteToDelete = null;
+  for (var i = 0; i < notes.length; i++) if (notes[i].id === noteId) { noteToDelete = notes[i]; break; }
+  if (!noteToDelete) return;
+  noteToDelete.deletedAt = new Date().toISOString();
+  var trash = loadTrash(); trash.push(noteToDelete); saveTrash(trash);
+  var remaining = notes.filter(function(n) { return n.id !== noteId; });
+  localStorage.setItem('hn_notes', JSON.stringify(remaining));
+  if (currentNoteId === noteId) closeEditor();
+  renderNotesList(currentFolder); renderSidebarNotes(currentFolder); renderFolderList();
+  renderTrashSection();
 }
 
 
@@ -1262,204 +1224,6 @@ function toggleSidebarNotes() {
 }
 
 
-function getNearestTag(node, tagName) {
-  var cur = node;
-  var target = String(tagName || '').toUpperCase();
-  while (cur && cur !== document.body) {
-    if (cur.tagName && cur.tagName.toUpperCase() === target) return cur;
-    cur = cur.parentNode;
-  }
-  return null;
-}
-
-function getCurrentLineText(range) {
-  var node = range.startContainer;
-  var offset = range.startOffset;
-  if (node.nodeType === 3) return node.textContent.slice(0, offset);
-  return (node.textContent || '').slice(0, offset);
-}
-
-function getListItemNumber(li) {
-  if (!li || !li.parentNode) return 1;
-  var ol = li.parentNode;
-  if (!ol.tagName || ol.tagName.toLowerCase() !== 'ol') return 1;
-  var start = parseInt(ol.getAttribute('start') || '1', 10);
-  var items = Array.prototype.slice.call(ol.children).filter(function(child) {
-    return child.tagName && child.tagName.toLowerCase() === 'li';
-  });
-  var idx = items.indexOf(li);
-  return (idx >= 0 ? start + idx : start);
-}
-
-function findPreviousOrderedListElement(node, root) {
-  var cur = node;
-  while (cur && cur !== root) {
-    var prev = cur.previousSibling;
-    while (prev) {
-      if (prev.nodeType === 1) {
-        if (prev.tagName && prev.tagName.toLowerCase() === 'ol') return prev;
-        var nested = prev.querySelector && prev.querySelector('ol:last-of-type');
-        if (nested) return nested;
-      }
-      prev = prev.previousSibling;
-    }
-    cur = cur.parentNode;
-  }
-  return null;
-}
-
-function getLastOrderedListNumber(ol) {
-  if (!ol) return 1;
-  var items = Array.prototype.slice.call(ol.children).filter(function(child) {
-    return child.tagName && child.tagName.toLowerCase() === 'li';
-  });
-  var start = parseInt(ol.getAttribute('start') || '1', 10);
-  return start + Math.max(0, items.length - 1);
-}
-
-function setCursorInsideStart(el) {
-  if (!el) return;
-  var range = document.createRange();
-  range.selectNodeContents(el);
-  range.collapse(true);
-  var sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-  savedRange = range.cloneRange();
-}
-
-function continueOrderedListFromParagraph() {
-  var editor = document.getElementById('editor-body');
-  var sel = window.getSelection();
-  if (!editor || !sel || !sel.rangeCount) return false;
-  var range = sel.getRangeAt(0);
-  if (!range.collapsed) return false;
-
-  var paragraph = getNearestTag(range.startContainer, 'P');
-  if (!paragraph || !paragraph.parentNode) return false;
-  var text = (paragraph.textContent || '').trim();
-  if (text === '') return false;
-
-  var endRange = range.cloneRange();
-  endRange.selectNodeContents(paragraph);
-  endRange.collapse(false);
-  if (range.compareBoundaryPoints(Range.END_TO_END, endRange) !== 0) return false;
-
-  var prevOl = findPreviousOrderedListElement(paragraph, editor);
-  if (!prevOl) return false;
-
-  var nextNumber = getLastOrderedListNumber(prevOl) + 1;
-  var newOl = document.createElement('ol');
-  newOl.setAttribute('start', String(nextNumber));
-  var li = document.createElement('li');
-  li.innerHTML = '<br>';
-  newOl.appendChild(li);
-
-  if (paragraph.nextSibling) paragraph.parentNode.insertBefore(newOl, paragraph.nextSibling);
-  else paragraph.parentNode.appendChild(newOl);
-
-  setCursorInsideStart(li);
-  return true;
-}
-
-function handleOrderedListShortcut(e) {
-  return false;
-}
-
-function handleOrderedListShortcut_legacy(e) {
-  if (e.key === ' ') {
-    var sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return false;
-    var range = sel.getRangeAt(0);
-    var lineText = getCurrentLineText(range);
-    var m = lineText.match(/^\s*(\d+)\.$/);
-    if (!m) return false;
-
-    e.preventDefault();
-    var startNum = parseInt(m[1], 10);
-    try {
-      if (range.startContainer.nodeType === 3) {
-        var node = range.startContainer;
-        var offset = range.startOffset;
-        var deleteRange = document.createRange();
-        deleteRange.setStart(node, Math.max(0, offset - m[0].length));
-        deleteRange.setEnd(node, offset);
-        deleteRange.deleteContents();
-        sel.removeAllRanges();
-        sel.addRange(deleteRange);
-      }
-      document.execCommand('insertOrderedList', false, null);
-      var li = getNearestTag(sel.anchorNode, 'LI');
-      var ol = getNearestTag(sel.anchorNode, 'OL');
-      if (ol && startNum !== 1) ol.setAttribute('start', String(startNum));
-      if (li && li.textContent.trim()) {
-        li.innerHTML = li.innerHTML.replace(/^\s*\d+\.\s*/, '');
-      }
-      saveSelection();
-      return true;
-    } catch(err) {
-      return false;
-    }
-  }
-
-  if (e.key === 'Enter' && !e.shiftKey) {
-    var resumed = continueOrderedListFromParagraph();
-    if (resumed) e.preventDefault();
-    return resumed;
-  }
-
-  return false;
-}
-
-
-
-
-function normalizePastedText(text) {
-  return (text || '').replace(/\r\n?/g, '\n');
-}
-
-function escapeHtmlText(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function convertPlainTextToEditorHtml(text) {
-  var normalized = normalizePastedText(text);
-  if (!normalized.trim()) return '';
-
-  var blocks = normalized.split(/\n{2,}/);
-  var html = blocks.map(function(block) {
-    var safe = escapeHtmlText(block).replace(/\n/g, '<br>');
-    return '<p>' + safe + '</p>';
-  }).join('');
-
-  return html;
-}
-
-function handlePlainTextPaste(e) {
-  if (!e) return;
-  e.preventDefault();
-
-  var text = '';
-  if (e.clipboardData && typeof e.clipboardData.getData === 'function') {
-    text = e.clipboardData.getData('text/plain') || '';
-  } else if (window.clipboardData && typeof window.clipboardData.getData === 'function') {
-    text = window.clipboardData.getData('Text') || '';
-  }
-
-  var html = convertPlainTextToEditorHtml(text);
-  if (!html) return;
-
-  restoreSelection();
-  document.execCommand('insertHTML', false, html);
-  saveSelection();
-  scheduleAutoSave();
-}
-
 /* ─────────────────────────────────
    20. SLASH COMMAND
 ───────────────────────────────── */
@@ -2080,15 +1844,11 @@ window.onload = function() {
     if (cont) { cont.style.maxHeight = '600px'; cont.style.overflow = 'auto'; }
   }
 
-  /* Nota de ejemplo — crear solo si no existe y no está en papelera */
+  /* Nota de ejemplo — siempre actualizar */
   var notes = loadNotes(); var exIdx = -1;
-  var trash = loadTrash(); var exampleInTrash = false;
   for (var i = 0; i < notes.length; i++) if (notes[i].id === 'example_001') { exIdx = i; break; }
-  for (var j = 0; j < trash.length; j++) if (trash[j].id === 'example_001') { exampleInTrash = true; break; }
-  if (exIdx === -1 && !exampleInTrash) {
-    notes.unshift(EXAMPLE_NOTE);
-    localStorage.setItem('hn_notes', JSON.stringify(notes));
-  }
+  if (exIdx >= 0) notes[exIdx] = EXAMPLE_NOTE; else notes.unshift(EXAMPLE_NOTE);
+  localStorage.setItem('hn_notes', JSON.stringify(notes));
 
   /* FAB */
   updateFAB();
@@ -2127,12 +1887,38 @@ window.onload = function() {
       if ((e.ctrlKey||e.metaKey) && e.key==='b') { e.preventDefault(); fmt('bold'); }
       if ((e.ctrlKey||e.metaKey) && e.key==='i') { e.preventDefault(); fmt('italic'); }
       if ((e.ctrlKey||e.metaKey) && e.key==='u') { e.preventDefault(); fmt('underline'); }
-    });
-
-    editorBody.addEventListener('paste', function(e) {
-      handlePlainTextPaste(e);
-    });
-
+      /* AUTO-LISTA NUMERADA: escribir "N." + Espacio al inicio de línea */
+      if (e.key === ' ') {
+        var sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return;
+        var range  = sel.getRangeAt(0);
+        var node   = range.startContainer;
+        var offset = range.startOffset;
+        var lineText = '';
+        if (node.nodeType === 3) lineText = node.textContent.slice(0, offset);
+        else lineText = (node.innerText || node.textContent || '').slice(0, offset);
+        var m = lineText.match(/^(\s*)(\d+)\.$/);
+        if (m) {
+          e.preventDefault();
+          var startNum = parseInt(m[2]);
+          var deleteRange = document.createRange();
+          deleteRange.setStart(node, offset - m[2].length - 1);
+          deleteRange.setEnd(node, offset);
+          deleteRange.deleteContents();
+          sel.removeAllRanges(); sel.addRange(deleteRange);
+          document.execCommand('insertOrderedList', false, null);
+          if (startNum !== 1) {
+            var cur = sel.anchorNode; var par = cur;
+            for (var att = 0; att < 8; att++) {
+              if (!par) break;
+              if (par.tagName && par.tagName.toLowerCase() === 'ol') { par.setAttribute('start', startNum); break; }
+              par = par.parentNode;
+            }
+          }
+          saveSelection();
+        }
+      }
+    })
     /* Auto-guardado al escribir */
     editorBody.addEventListener('input', function() { scheduleAutoSave(); });
 
